@@ -21,7 +21,7 @@ class Target(ABC):
     # Abstract methods
     #
 
-    def __init__(self, target_args=None, target_path=None, target_env=None, target_cwd=None):
+    def __init__(self, target_args=None, target_path=None, target_env=None, target_cwd=None, target_os='linux', target_arch='x86_64'):
         """
         Create an autom
 
@@ -37,6 +37,8 @@ class Target(ABC):
         self.target_path = target_path
         self.target_env = target_env
         self.target_cwd = target_cwd
+        self.target_os = target_os
+        self.target_arch = target_arch
         self._local_path = None
 
     @abstractmethod
@@ -81,9 +83,7 @@ class Target(ABC):
         Start the target.
         :return:
         """
-        if self._local_path:
-            os.system("sudo umount %s" % self.local_path)
-            os.rmdir(self.local_path)
+        pass
 
     @abstractmethod
     def restart(self):
@@ -94,7 +94,7 @@ class Target(ABC):
         pass
 
     @abstractmethod
-    def run_command(self, *args, **kwargs):
+    def _run_command(self, args, env, **kwargs):
         """
         Run a command inside the target.
         :return:
@@ -149,7 +149,7 @@ class Target(ABC):
     # Convenience methods
     #
 
-    def __enter__(self): return self.start()
+    def __enter__(self): return self
     def __exit__(self, *args): self.stop()
 
     @property
@@ -366,6 +366,21 @@ class Target(ABC):
             with self.run_context(*args, **kwargs) as p:
                 yield p
 
+    def run_command(
+        self, args=None, args_prefix=None, args_suffix=None, env=None, # for us
+        **kwargs # for subclasses
+    ):
+        """
+        Run a command inside the target.
+        :return:
+        """
+        command_args = args or self.target_args
+        if args_prefix:
+            command_args = args_prefix + command_args
+        if args_suffix:
+            command_args = command_args + args_suffix
+
+        return self._run_command(command_args, self.target_env if env is None else env, **kwargs)
 
 
 from .docker_target import DockerImageTarget

@@ -23,6 +23,7 @@ The following Bows exist:
 - AngrStateBow (can create a angr states with the right env, args, and fs)
 - QEMUTraceBow (does qemu tracing of the target)
 - GDBServerBow (launches the target in a gdbserver)
+- CoreBow (launches the target and retrieves a core)
 - (TODO) RRBow (does rr tracing of the target)
 - (TODO) AFLBow (launches AFL of the target)
 
@@ -101,5 +102,3 @@ Some caveats at the moment:
 
 - archr does not handle string-specified (as opposed to array-specified) entrypoint directives in the docker file.
   This isn't hard; we just haven't gotten around to it (see issue #1).
-- Because angr needs a `chroot_fs` to be provided to it, archr currently requires sudo rights to mount the DockerImageTarget's filesystem in an accessible folder.
-  This can be resolved with some angr work.

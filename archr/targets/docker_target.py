@@ -2,6 +2,7 @@ import subprocess
 import contextlib
 import logging
 import docker
+import shlex
 import json
 import os
 
@@ -9,6 +10,7 @@ l = logging.getLogger("archr.target.docker_target")
 
 from . import Target
 
+_super_mount_cmd = "docker run --rm --privileged --mount type=bind,src=/tmp/archr_mounts/,target=/tmp/archr_mounts,bind-propagation=rshared --mount type=bind,src=/var/lib/docker,target=/var/lib/docker,bind-propagation=rshared ubuntu "
 class DockerImageTarget(Target):
     """
     Describes a target in the form of a Docker image.
@@ -36,12 +38,19 @@ class DockerImageTarget(Target):
     # Lifecycle
     #
 
-    def build(self, *args, **kwargs):
+    def build(self):
         self.image = self._client.images.get(self.image_id)
         self.target_args = (
             self.target_args or
             (self.image.attrs['Config']['Entrypoint'] or [ ]) + (self.image.attrs['Config']['Cmd'] or [ ])
         )
+
+        # let's assume that we're not analyzing either setarch nor /bin/sh
+        if self.target_args[:2] == [ "/bin/sh", "-c" ]:
+            self.target_args = shlex.split(self.target_args[-1])
+        if self.target_args[:3] == [ "setarch", "x86_64", "-R" ]:
+            self.target_args = self.target_args[3:]
+
         self.target_env = self.target_env or self.image.attrs['Config']['Env']
         self.target_path = self.target_path or self.target_args[0]
         self.target_cwd = self.target_cwd or self.image.attrs['Config']['WorkingDir'] or "/"
@@ -49,10 +58,11 @@ class DockerImageTarget(Target):
         super().build()
         return self
 
-    def start(self):
+    def start(self, user=None): #pylint:disable=arguments-differ
         self.container = self._client.containers.run(
             self.image,
             entrypoint=['/bin/sh'], command=[], environment=self.target_env,
+            user=user,
             detach=True, auto_remove=True,
             stdin_open=True, stdout=True, stderr=True,
             privileged=True, security_opt=["seccomp=unconfined"], #for now, hopefully...
@@ -67,7 +77,9 @@ class DockerImageTarget(Target):
     def stop(self):
         if self.container:
             self.container.kill()
-        super().stop()
+        if self._local_path:
+            os.system(_super_mount_cmd + "umount -l %s" % self.local_path)
+            os.system(_super_mount_cmd + "rmdir %s" % self.local_path)
         return self
 
     def remove(self):
@@ -88,16 +100,17 @@ class DockerImageTarget(Target):
             return self
 
         self._local_path = where or "/tmp/archr_mounts/%s" % self.container.id
-        with contextlib.suppress(OSError):
-            os.makedirs(self.local_path)
-        os.system("sudo mount -o bind %s %s" % (self._merged_path, self.local_path))
+        os.system(_super_mount_cmd + "mkdir -p %s" % (self.local_path))
+        os.system(_super_mount_cmd + "mount -o bind %s %s" % (self._merged_path, self.local_path))
         return self
 
     def inject_tarball(self, target_path, tarball_path=None, tarball_contents=None):
         if tarball_contents is None:
             with open(tarball_path, "rb") as t:
                 tarball_contents = t.read()
-        assert self.run_command(["mkdir", "-p", target_path]).wait() == 0
+        p = self.run_command(["mkdir", "-p", target_path])
+        if p.wait() != 0:
+            raise ArchrError("Unexpected error when making target_path in container: " + p.stdout.read() + " " + p.stderr.read())
         self.container.put_archive(target_path, tarball_contents)
 
     def retrieve_tarball(self, target_path):
@@ -134,26 +147,26 @@ class DockerImageTarget(Target):
     # Execution
     #
 
-    def run_command(
-        self, args=None, args_prefix=None, args_suffix=None, aslr=True, env=None,
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    def _run_command(
+        self, args, env,
+        user=None, aslr=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     ): #pylint:disable=arguments-differ
-        assert self.container is not None
+        if self.container is None:
+            raise ArchrError("target.start() must be called before target.run_command()")
 
-        command_args = args or self.target_args
-        if args_prefix:
-            command_args = args_prefix + command_args
-        if args_suffix:
-            command_args = command_args + args_suffix
         if not aslr:
-            command_args = ['setarch', 'x86_64', '-R'] + command_args
+            args = ['setarch', 'x86_64', '-R'] + args
 
         docker_args = [ "docker", "exec", "-i" ]
-        for e in self.target_env:
+        for e in env:
             docker_args += [ "-e", e ]
+        if user:
+            docker_args += [ "-u", user ]
         docker_args.append(self.container.id)
 
         return subprocess.Popen(
-            docker_args + command_args,
-            stdin=stdin, stdout=stdout, stderr=stderr, bufsize=0,
+            docker_args + args,
+            stdin=stdin, stdout=stdout, stderr=stderr, bufsize=0
         )
+
+from ..errors import ArchrError
