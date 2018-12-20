@@ -10,10 +10,6 @@ class AflBow(Bow):
 
     def __init__(self, target):
         super(AflBow, self).__init__(target)
-
-        # set a sane default
-        self.fuzzdir = os.path.join(os.curdir, "fuzz")
-
         self.target.mount_local()
         self.runner = None
 
@@ -22,23 +18,13 @@ class AflBow(Bow):
         Returns an AFLRunner instance
         """
 
-        # THIS IS BAD
+        # TODO: resolve container vs local inject_path
         if hasattr(self.target, "container"):
             ft_path = "/"
+            self.target.inject_path(f.get_qemu_path(), ft_path) 
+            self.runner = f.AFL_runner(self.target.target_args, 
+                                       container=self.target.container)
         else:
-            ft_path = "/tmp/"
-        
-        self.target.inject_path(f.get_lib_path(), ft_path)
-        self.target.inject_path(f.get_qemu_path(), ft_path) 
-
-        try:
-            self.runner = f.AFL_runner(self.target.target_args, container=self.target.container)
-        except:
             self.runner = f.AFL_runner(self.target.target_args)
-        return self.runner
 
-    def set_fuzz_dir(new_fuzz):
-        if os.path.exists(new_fuzz):
-            self.fuzzdir = new_fuzz 
-        else:
-            print(new_fuzz + " not found")
+        return self.runner
