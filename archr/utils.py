@@ -64,7 +64,7 @@ def hook_entry(binary, asm_code=None, bin_code=None):
     return main_bin.read()
 
 
-def get_shared_lib_mmaps(strace_log_lines):
+def get_mmaps(strace_log_lines):
     files = {
         'open':{},
         'closed':{}
@@ -84,7 +84,7 @@ def get_shared_lib_mmaps(strace_log_lines):
                 #use only the base filename
                 filename = entry.syscall.args[1].split("/")[-1]
                 #tracking if an executable page was ever mapped from the file descriptor
-                files['open'][fd] = [filename,[],False]
+                files['open'][fd] = [filename,[]]
         
         # if a file descriptor is closed, we need to remove it from the open files dictionary
         # we want to track the mmaps, so move it to 'closed' by file name since the file descriptor will likely be re-used.
@@ -94,11 +94,9 @@ def get_shared_lib_mmaps(strace_log_lines):
             if fd >= 3:
                 filename = files['open'][fd][0]
                 mmaps = files['open'][fd][1]
-                executable_page = files['open'][fd][2]
                 
-                # if we never mapped any pages, and didn't have an executable page
-                # then we don't care about it.
-                if mmaps and executable_page:
+                # if we never mapped any pages, then we don't care about it.
+                if mmaps:
                     # otherwise move to 'closed'
                     files['closed'][filename] = mmaps
                 
@@ -110,8 +108,6 @@ def get_shared_lib_mmaps(strace_log_lines):
             fd = entry.syscall.args[4]
             if not fd == -1:
                 files['open'][fd][1].append(entry.syscall.result)
-                if 'PROT_EXEC' in entry.syscall.args[2]:
-                    files['open'][fd][2] = True
 
     #lets "close" everything that never got closed
     for fd,(filename,mmaps) in files['open'].items():
