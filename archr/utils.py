@@ -82,7 +82,8 @@ def get_mmaps(strace_log_lines):
             # also ignore errors
             if fd >= 3:
                 filename = entry.syscall.args[1]
-                files['open'][fd] = (filename,[])
+                #tracking if an executable page was ever mapped from the file descriptor
+                files['open'][fd] = [filename,[],False]
         
         # if a file descriptor is closed, we need to remove it from the open files dictionary
         # we want to track the mmaps, so move it to 'closed' by file name since the file descriptor will likely be re-used.
@@ -92,15 +93,24 @@ def get_mmaps(strace_log_lines):
             if fd >= 3:
                 filename = files['open'][fd][0]
                 mmaps = files['open'][fd][1]
-                if mmaps:
+                executable_page = files['open'][fd][2]
+                
+                # if we never mapped any pages, and didn't have an executable page
+                # then we don't care about it.
+                if mmaps and executable_page:
+                    # otherwise move to 'closed'
                     files['closed'][filename] = mmaps
+                
                 del files['open'][fd]
         
         # we can use the file descriptor to look up the dict entry to update the mmaps
         elif entry.syscall == 'mmap':
             # only care about valid file descriptors
-            if not entry.syscall.args[4] == -1:
-                files['open'][entry.syscall.args[4]][1].append(entry.syscall.result)
+            fd = entry.syscall.args[4]
+            if not fd == -1:
+                files['open'][fd][1].append(entry.syscall.result)
+                if 'PROT_EXEC' in entry.syscall.args[2]:
+                    files['open'][fd][2] = True
 
     #lets "close" everything that never got closed
     for fd,(filename,mmaps) in files['open'].items():
