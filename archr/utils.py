@@ -100,8 +100,7 @@ def get_mmaps(strace_log_lines):
         elif entry.syscall == 'mmap':
             # only care about valid file descriptors
             if not entry.syscall.args[4] == -1:
-                if 'PROT_EXEC' in entry.syscall.args[2]:
-                    files['open'][entry.syscall.args[4]][1].append(entry.syscall.result)
+                files['open'][entry.syscall.args[4]][1].append(entry.syscall.result)
 
     #lets "close" everything that never got closed
     for fd,(filename,mmaps) in files['open'].items():
