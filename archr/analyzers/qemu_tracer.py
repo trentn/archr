@@ -30,6 +30,7 @@ class QemuTraceResult:
     shared_lib_mmaps = None
     crash_address = None
     base_address = None
+    ld_address = None
     magic_contents = None
     core_path = None
 
@@ -119,7 +120,18 @@ class QEMUTracerAnalyzer(ContextAnalyzer):
 
                 # Find where qemu loaded the binary. Primarily for PIE
                 try:
-                    r.base_address = int(next(t.split()[1] for t in trace_iter if t.startswith(b"start_code")), 16) #pylint:disable=stop-iteration-return
+                    # the address that seems to work with an Angr Project seems to be the address of the page before the executable page
+                    # this is a hacky naive in-elegant way of parsing the QEMU 'page' output
+                    prev_line = None
+                    for line in trace_iter:
+                        if b'r-x' in line.split()[-1]:
+                            if not r.base_address:
+                                r.base_address = int(prev_line.split(b'-')[0],16)
+                            else:
+                                r.ld_address = int(prev_line.split(b'-')[0],16)
+                                break
+                        prev_line = line
+
                 except StopIteration as e:
                     raise ArchrError("The trace does not include any data. Did you forget to chmod +x the binary?") from e
 
