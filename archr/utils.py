@@ -92,14 +92,16 @@ def get_mmaps(strace_log_lines):
             if fd >= 3:
                 filename = files['open'][fd][0]
                 mmaps = files['open'][fd][1]
-                files['closed'][filename] = mmaps
+                if mmaps:
+                    files['closed'][filename] = mmaps
                 del files['open'][fd]
         
         # we can use the file descriptor to look up the dict entry to update the mmaps
         elif entry.syscall == 'mmap':
             # only care about valid file descriptors
             if not entry.syscall.args[4] == -1:
-                files['open'][entry.syscall.args[4]][1].append(entry.syscall.result)
+                if 'PROT_EXEC' in entry.syscall.args[2]:
+                    files['open'][entry.syscall.args[4]][1].append(entry.syscall.result)
 
     #lets "close" everything that never got closed
     for fd,(filename,mmaps) in files['open'].items():
