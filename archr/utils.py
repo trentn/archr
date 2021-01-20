@@ -81,7 +81,8 @@ def get_shared_lib_mmaps(strace_log_lines):
             # only care about file descriptors other than STDIN,STDOUT,STDERR
             # also ignore errors
             if fd >= 3:
-                filename = entry.syscall.args[1]
+                #use only the base filename
+                filename = entry.syscall.args[1].split("/")[-1]
                 #tracking if an executable page was ever mapped from the file descriptor
                 files['open'][fd] = [filename,[],False]
         
