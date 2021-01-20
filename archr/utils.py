@@ -63,7 +63,7 @@ def hook_entry(binary, asm_code=None, bin_code=None):
     main_bin.seek(0)
     return main_bin.read()
 
-
+#TODO: track sizes which should be capturable from the mmap arguments
 def get_mmaps(strace_log_lines):
     files = {
         'open':{},
