@@ -64,7 +64,7 @@ def hook_entry(binary, asm_code=None, bin_code=None):
     return main_bin.read()
 
 
-def get_mmaps(strace_log_lines):
+def get_shared_lib_mmaps(strace_log_lines):
     files = {
         'open':{},
         'closed':{}

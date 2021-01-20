@@ -16,7 +16,7 @@ from .. import _angr_available
 if _angr_available:
     import angr
 
-from ..utils import get_mmaps
+from ..utils import get_shared_lib_mmaps
 
 class QemuTraceResult:
     # results
@@ -27,7 +27,7 @@ class QemuTraceResult:
 
     # introspection
     trace = None
-    mmaps = None
+    shared_lib_mmaps = None
     crash_address = None
     base_address = None
     magic_contents = None
@@ -144,7 +144,7 @@ class QEMUTracerAnalyzer(ContextAnalyzer):
                 strace_lines = [line.decode('utf-8') for line in flight.process.stderr.readlines()]
                 # naive cleanup... assumes that only strace lines in stderr will start with a number
                 strace_lines = [line for line in strace_lines if re.match(r'^\d+ ', line)]
-                r.mmaps = get_mmaps(strace_lines)
+                r.shared_lib_mmaps = get_shared_lib_mmaps(strace_lines)
 
                 # remove the trace file on the target
                 self.target.remove_path(target_trace_filename)
