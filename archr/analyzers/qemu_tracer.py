@@ -16,6 +16,8 @@ from .. import _angr_available
 if _angr_available:
     import angr
 
+from ..utils import get_mmaps
+
 class QemuTraceResult:
     # results
     returncode = None
@@ -25,6 +27,7 @@ class QemuTraceResult:
 
     # introspection
     trace = None
+    mmaps = None
     crash_address = None
     base_address = None
     magic_contents = None
@@ -74,7 +77,9 @@ class QEMUTracerAnalyzer(ContextAnalyzer):
             target_magic_filename = tmp_prefix + ".magic" if record_magic else None
             local_core_filename = tmp_prefix + ".core" if save_core else None
 
-            target_cmd = self._build_command(trace_filename=target_trace_filename, magic_filename=target_magic_filename, coredump_dir=tmpdir)
+            target_cmd = self._build_command(trace_filename=target_trace_filename,
+                                             magic_filename=target_magic_filename,
+                                             coredump_dir=tmpdir)
 
             r = QemuTraceResult()
 
@@ -136,6 +141,11 @@ class QEMUTracerAnalyzer(ContextAnalyzer):
 
                 l.debug("Trace consists of %d basic blocks", len(r.trace))
 
+                strace_lines = [line.decode('utf-8') for line in flight.process.stderr.readlines()]
+                # naive cleanup... assumes that only strace lines in stderr will start with a number
+                strace_lines = [line for line in strace_lines if re.match(r'^\d+ ', line)]
+                r.mmaps = get_mmaps(strace_lines)
+
                 # remove the trace file on the target
                 self.target.remove_path(target_trace_filename)
 
@@ -188,9 +198,12 @@ class QEMUTracerAnalyzer(ContextAnalyzer):
         # record trace
         if trace_filename:
             cmd_args += ["-d", "nochain,exec,page", "-D", trace_filename] if 'cgc' not in qemu_variant else ["-d", "exec", "-D", trace_filename]
+            # record the strace output, this will be output to stderr
+            cmd_args += ["-strace"]
         else:
             if 'cgc' in qemu_variant:
                 cmd_args += ["-enable_double_empty_exiting"]
+            
 
         # save CGC magic page
         if magic_filename:

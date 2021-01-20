@@ -3,6 +3,13 @@ import struct
 import cle
 import io
 
+import logging
+
+from . import strace_parser
+
+l = logging.getLogger("angr.utils")
+
+
 def parse_ldd(mem_map_str):
     entries = [l.strip() for l in mem_map_str.decode('utf-8').splitlines()]
     parsed = { }
@@ -55,3 +62,47 @@ def hook_entry(binary, asm_code=None, bin_code=None):
     main_bin.write(b.main_object.arch.asm(asm_code) if asm_code else bin_code)
     main_bin.seek(0)
     return main_bin.read()
+
+
+def get_mmaps(strace_log_lines):
+    files = {
+        'open':{},
+        'closed':{}
+    }
+
+    entries = strace_parser.parse(strace_log_lines)
+    entries = [entry for entry in entries if entry.syscall in ('openat','mmap','close')]
+
+    for entry in entries:
+        # for an openat, create a dict entry for the file descriptor
+        # the entry should be a tuple of the filename, and mmaps (initially empty)
+        if entry.syscall == 'openat':
+            fd = entry.syscall.result
+            # only care about file descriptors other than STDIN,STDOUT,STDERR
+            # also ignore errors
+            if fd >= 3:
+                filename = entry.syscall.args[1]
+                files['open'][fd] = (filename,[])
+        
+        # if a file descriptor is closed, we need to remove it from the open files dictionary
+        # we want to track the mmaps, so move it to 'closed' by file name since the file descriptor will likely be re-used.
+        elif entry.syscall == 'close':
+            fd = entry.syscall.args[0]
+            # only care about file descriptors other than STDIN,STDOUT,STDERR
+            if fd >= 3:
+                filename = files['open'][fd][0]
+                mmaps = files['open'][fd][1]
+                files['closed'][filename] = mmaps
+                del files['open'][fd]
+        
+        # we can use the file descriptor to look up the dict entry to update the mmaps
+        elif entry.syscall == 'mmap':
+            # only care about valid file descriptors
+            if not entry.syscall.args[4] == -1:
+                files['open'][entry.syscall.args[4]][1].append(entry.syscall.result)
+
+    #lets "close" everything that never got closed
+    for fd,(filename,mmaps) in files['open'].items():
+        files['closed'][filename] = mmaps
+
+    return files['closed']
