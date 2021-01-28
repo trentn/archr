@@ -107,9 +107,19 @@ def p_strace_line(p):
 def p_syscall(p):
     """
     syscall : SYMBOL LEFT_PAREN arg_list RIGHT_PAREN result
+    syscall : SYMBOL LEFT_PAREN RIGHT_PAREN result
     syscall : SYMBOL LEFT_PAREN arg_list RIGHT_PAREN
+    syscall : SYMBOL LEFT_PAREN RIGHT_PAREN 
     """
-    p[0] = Syscall(p[1], p[3], p[5] if len(p) > 5 else None)
+    if len(p) == 6:
+        p[0] = Syscall(p[1], p[3], p[5])
+    elif len(p) == 5:
+        if isinstance(p[4],str):
+            p[0] = Syscall(p[1], p[3], None)
+        elif isinstance(p[4],int):
+            p[0] = Syscall(p[1], None, p[4])
+    else:
+        p[0] = Syscall(p[1], p[3], None)
 
 def p_error_message(p):
     """
