@@ -71,7 +71,7 @@ class QEMUTracerAnalyzer(ContextAnalyzer):
                 shutil.rmtree(tmpdir)
 
     @contextlib.contextmanager
-    def fire_context(self, record_trace=True, record_magic=False, save_core=False):
+    def fire_context(self, record_trace=True, record_magic=False, save_core=False, strace_mmaps=False):
         with self._target_mk_tmpdir() as tmpdir:
             tmp_prefix = tempfile.mktemp(dir='/tmp', prefix="tracer-")
             target_trace_filename = tmp_prefix + ".trace" if record_trace else None
@@ -153,10 +153,11 @@ class QEMUTracerAnalyzer(ContextAnalyzer):
 
                 l.debug("Trace consists of %d basic blocks", len(r.trace))
 
-                strace_lines = [line.decode('utf-8') for line in flight.process.stderr.readlines()]
-                # naive cleanup... assumes that only strace lines in stderr will start with a number
-                strace_lines = [line for line in strace_lines if re.match(r'^\d+ ', line)]
-                r.mmaps = get_mmaps(strace_lines)
+                if strace_mmaps:
+                    strace_lines = [line.decode('utf-8') for line in flight.process.stderr.readlines()]
+                    # naive cleanup... assumes that only strace lines in stderr will start with a number
+                    strace_lines = [line for line in strace_lines if re.match(r'^\d+ ', line)]
+                    r.mmaps = get_mmaps(strace_lines)
 
                 # remove the trace file on the target
                 self.target.remove_path(target_trace_filename)
