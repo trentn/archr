@@ -123,11 +123,19 @@ class QEMUTracerAnalyzer(ContextAnalyzer):
                     # the address that seems to work with an Angr Project seems to be the address of the page before the executable page
                     # this is a hacky naive in-elegant way of parsing the QEMU 'page' output
                     prev_line = None
+                    execs_seen = 0
+                    base_addr_line = False
                     for line in trace_iter:
-                        if b'r-x' in line.split()[-1]:
+                        if line.split(b' ')[0] == b'start':
+                            base_addr_line = True
+                            continue
+                        if base_addr_line:
                             if not r.base_address:
-                                r.base_address = int(prev_line.split(b'-')[0],16)
-                            else:
+                                r.base_address = int(line.split(b'-')[0],16)
+                            base_addr_line = False
+                        if b'r-x' in line.split()[-1]:
+                            execs_seen = execs_seen+1
+                            if execs_seen == 2:
                                 r.ld_address = int(prev_line.split(b'-')[0],16)
                                 break
                         prev_line = line
