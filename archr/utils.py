@@ -71,7 +71,7 @@ def get_mmaps(strace_log_lines):
     }
 
     entries = strace_parser.parse(strace_log_lines)
-    entries = [entry for entry in entries if entry.syscall in ('openat','mmap','close')]
+    entries = [entry for entry in entries if entry.syscall in ('openat','mmap','mmap2','close')]
 
     for entry in entries:
         # for an openat, create a dict entry for the file descriptor
@@ -103,7 +103,7 @@ def get_mmaps(strace_log_lines):
                 del files['open'][fd]
         
         # we can use the file descriptor to look up the dict entry to update the mmaps
-        elif entry.syscall == 'mmap':
+        elif entry.syscall == 'mmap' or entry.syscall == 'mmap2':
             # only care about valid file descriptors
             fd = entry.syscall.args[4]
             if fd >= 3:

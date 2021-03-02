@@ -164,7 +164,7 @@ class QEMUTracerAnalyzer(ContextAnalyzer):
                 if strace_mmaps:
                     strace_lines = [line.decode('utf-8') for line in flight.process.stderr.readlines()]
                     # naive cleanup... assumes that only strace lines in stderr will start with a number
-                    strace_lines = [line for line in strace_lines if re.match(r'^\d+ ', line)]
+                    strace_lines = [line for line in strace_lines if re.match(r'^\d+ ', line) and not 'Unknown syscall' in line]
                     r.mmaps = get_mmaps(strace_lines)
 
                 # remove the trace file on the target
